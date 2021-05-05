@@ -1,0 +1,168 @@
+---
+title: "Practical Machine Learning Week 4 Project"
+author: "Younghoon Seo"
+date: "5/5/2021"
+output: html_document
+---
+# Overview
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, we will utilize data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+# Data and Library Loading
+```{r, results="hide"}
+library(ggplot2)
+library(caret)
+library(rattle)
+library(corrplot)
+library(randomForest)
+```
+
+```{r}
+set.seed(12345)
+```
+
+```{r}
+train_url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url<- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+if (!file.exists("./data")) {
+        dir.create("./data")
+}
+if (!file.exists("./data/pml-training.csv")) {
+        download.file(train_url, destfile="./data/pml-training.csv", method="curl")
+}
+if (!file.exists("./data/pml-testing.csv")) {
+        download.file(test_url, destfile="./data/pml-testing.csv", method="curl")
+}
+```
+
+```{r}
+traincsv <- read.csv("./data/pml-training.csv")
+testcsv <- read.csv("./data/pml-testing.csv")
+```
+
+# Cleaning and Processing Data
+Missing values and metadata (first seven variables/columns) were eliminated from the data.
+```{r}
+traincsv<-traincsv[,colSums(is.na(traincsv))==0]
+traincsv <- traincsv[,-c(1:7)]
+```
+
+Afterward, near zero variance variables were also removed
+```{r}
+nvz<-nearZeroVar(traincsv)
+traincsv<-traincsv[,-nvz]
+```
+
+Upon eliminating unnecessary variables, traincsv data was split into training and validation data sets.
+```{r}
+inTrain<-createDataPartition(y=traincsv$classe,p=.7,list=F)
+train_data<-traincsv[inTrain,]
+validation_data<-traincsv[-inTrain,]
+```
+
+The process of data cleaning was also applied to the test data set. 
+```{r}
+testcsv<-testcsv[,colSums(is.na(testcsv))==0]
+testcsv <- testcsv[,-c(1:7)]
+traincsv<-traincsv[,-nvz]
+test_data<-testcsv
+```
+
+Prior to creating the models, a correlation matrix of variables in the training data set was created for visualizing the relationship between the variables.
+```{r}
+cor_data<-cor(train_data[,-length(names(train_data))])
+corrplot(cor_data,method="color")
+```
+
+# Models
+This investigation utilized the following models:
+
+- Decision Tree
+- Random Forest
+- Gradient Boosted Trees
+
+## Decision Tree
+```{r}
+model_tree<-train(classe~.,data=train_data,method="rpart", 
+                  trControl=trainControl(method="cv",number=4,verboseIter=F))
+fancyRpartPlot(model_tree$finalModel)
+```
+
+```{r}
+predict_tree<-predict(model_tree,validation_data)
+confusionMatrix(predict_tree,factor(validation_data$classe))
+```
+
+
+```{r}
+plot(model_tree)
+```
+
+```{r}
+accuracy_tree<-postResample(predict_tree,factor(validation_data$classe))["Accuracy"]
+oose_tree<-1-accuracy_tree
+```
+
+## Random Forest
+
+```{r}
+model_forest<-train(classe~.,data=train_data,method="rf",
+                    trControl=trainControl(method="cv",number=4,verboseIter=F))
+```
+
+```{r}
+predict_forest<-predict(model_forest,validation_data)
+confusionMatrix(predict_forest,factor(validation_data$classe))
+```
+
+```{r}
+plot(model_forest)
+```
+
+```{r}
+accuracy_forest<-postResample(predict_forest,factor(validation_data$classe))["Accuracy"]
+oose_forest<-1-accuracy_forest
+```
+
+## Gradient Boosted Tree
+```{r}
+model_boosting<-train(classe~.,data=train_data,method="gbm",
+                      trControl=trainControl(method="cv",number=4,verboseIter=F),verbose=F)
+
+```
+
+```{r}
+predict_boosting<-predict(model_boosting,validation_data)
+confusionMatrix(predict_boosting,factor(validation_data$classe))
+```
+
+```{r}
+plot(model_boosting)
+```
+
+```{r}
+accuracy_boosting<-postResample(predict_boosting,factor(validation_data$classe))["Accuracy"]
+oose_boosting<-1-accuracy_boosting
+```
+
+# Error Comparison
+```{r}
+error_tree<-data.frame(accuracy_tree,oose_tree)
+error_forest<-data.frame(accuracy_forest,oose_forest)
+error_boosting<-data.frame(accuracy_boosting,oose_boosting)
+error_table<-data.frame(Accuracy=c(error_tree[[1]],error_forest[[1]],error_boosting[[1]]),
+           Out_Of_Sample_Error=c(error_tree[[2]],error_forest[[2]],error_boosting[[2]]))
+rownames(error_table)<-c("Decision Tree","Random Forest","Gradient Boosted Tree")
+error_table
+```
+
+The table clearly delineated that the best model was Random Forest model, given the 0.9896 accuracy and 0.0104 out of sample error rate.
+
+# Prediction
+The Random Forest model was used to predict the classe outcome for 20 cases in the test data set.
+```{r}
+prediction<-predict(model_forest,test_data)
+prediction
+```
