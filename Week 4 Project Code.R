@@ -63,7 +63,7 @@ plot(model_forest)
 accuracy_forest<-postResample(predict_forest,factor(validation_data$classe))["Accuracy"]
 oose_forest<-1-accuracy_forest
 
-##Boosting
+##Gradient Boosted Tree
 model_boosting<-train(classe~.,data=train_data,method="gbm",
                       trControl=trainControl(method="cv",number=4,verboseIter=F))
 predict_boosting<-predict(model_boosting,validation_data)
@@ -83,3 +83,4 @@ error_table
 
 #Prediction
 prediction<-prediction(model_forest,test_data)
+prediction
